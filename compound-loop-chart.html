@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compound Loop — Interactive Chart</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0d0d0f;
+      color: #e8e8f0;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      text-align: center;
+      padding: 48px 24px 32px;
+    }
+    header h1 {
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #7c6fff, #4fc3f7, #7c6fff);
+      background-size: 200%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: shimmer 4s linear infinite;
+    }
+    @keyframes shimmer { to { background-position: 200% center; } }
+    header p {
+      margin-top: 10px;
+      color: #888;
+      font-size: 1rem;
+      letter-spacing: 0.3px;
+    }
+
+    /* ── Tab Nav ── */
+    nav {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 24px 32px;
+      flex-wrap: wrap;
+    }
+    nav button {
+      padding: 8px 20px;
+      border-radius: 999px;
+      border: 1px solid #2a2a3a;
+      background: #16161f;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+    nav button:hover { border-color: #7c6fff; color: #fff; }
+    nav button.active {
+      background: #7c6fff;
+      border-color: #7c6fff;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* ── Sections ── */
+    section { display: none; padding: 0 24px 64px; max-width: 960px; margin: 0 auto; }
+    section.visible { display: block; }
+
+    /* ── Loop Flow Diagram ── */
+    .loop-flow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      position: relative;
+    }
+
+    .loop-node {
+      width: min(440px, 100%);
+      padding: 20px 28px;
+      border-radius: 14px;
+      border: 1px solid #2a2a3a;
+      background: #16161f;
+      cursor: pointer;
+      transition: all 0.25s;
+      position: relative;
+      z-index: 1;
+    }
+    .loop-node:hover, .loop-node.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 24px var(--glow);
+      transform: scale(1.02);
+    }
+    .loop-node .tag {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    .loop-node h3 { font-size: 1.05rem; color: #fff; }
+    .loop-node p  { margin-top: 6px; font-size: 0.82rem; color: #888; line-height: 1.5; }
+
+    .node-detail {
+      width: min(440px, 100%);
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.35s ease, opacity 0.3s;
+      opacity: 0;
+    }
+    .node-detail.open { max-height: 300px; opacity: 1; }
+    .node-detail-inner {
+      background: #1c1c28;
+      border: 1px solid #2a2a3a;
+      border-top: none;
+      border-radius: 0 0 14px 14px;
+      padding: 16px 24px;
+      font-size: 0.82rem;
+      color: #bbb;
+      line-height: 1.7;
+    }
+    .node-detail-inner code {
+      background: #0d0d0f;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      color: #7c6fff;
+    }
+
+    .arrow {
+      width: 2px;
+      height: 32px;
+      background: linear-gradient(to bottom, #2a2a3a, #7c6fff88);
+      position: relative;
+      margin: 0 auto;
+    }
+    .arrow::after {
+      content: '';
+      position: absolute;
+      bottom: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: #7c6fff88;
+    }
+
+    .loop-back {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 8px;
+      color: #7c6fff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      animation: pulse 2.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.6; }
+      50%       { opacity: 1; }
+    }
+    .loop-back::before, .loop-back::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(to right, transparent, #7c6fff44);
+    }
+    .loop-back::after { background: linear-gradient(to left, transparent, #7c6fff44); }
+
+    /* ── Files Panel ── */
+    .files-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+    .file-card {
+      border-radius: 16px;
+      border: 1px solid #2a2a3a;
+      background: #16161f;
+      overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s;
+      cursor: pointer;
+    }
+    .file-card:hover { transform: translateY(-4px); border-color: var(--accent); }
+    .file-card-header {
+      padding: 20px 20px 14px;
+      border-bottom: 1px solid #2a2a3a;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .file-icon {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      background: var(--accent-dim);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem;
+    }
+    .file-card-header h3 { font-size: 0.95rem; color: #fff; }
+    .file-card-header p  { font-size: 0.75rem; color: #666; margin-top: 2px; font-family: monospace; }
+    .file-card-body { padding: 16px 20px; }
+    .file-card-body p { font-size: 0.82rem; color: #888; line-height: 1.6; }
+    .file-fields { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .file-field {
+      display: flex; align-items: baseline; gap: 8px;
+      font-size: 0.78rem;
+    }
+    .file-field .label {
+      color: var(--accent);
+      font-weight: 600;
+      white-space: nowrap;
+      min-width: 100px;
+    }
+    .file-field .val { color: #aaa; }
+
+    /* ── Compound Growth Chart ── */
+    .chart-wrap {
+      background: #16161f;
+      border: 1px solid #2a2a3a;
+      border-radius: 16px;
+      padding: 28px;
+    }
+    .chart-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    .chart-sub { font-size: 0.8rem; color: #666; margin-bottom: 24px; }
+
+    canvas { width: 100%; border-radius: 8px; }
+
+    .legend {
+      display: flex;
+      gap: 20px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .legend-item {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 0.8rem; color: #aaa;
+    }
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+    }
+
+    .slider-wrap {
+      margin-top: 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 0.82rem;
+      color: #888;
+    }
+    .slider-wrap input[type=range] {
+      flex: 1;
+      accent-color: #7c6fff;
+    }
+    .slider-wrap span { min-width: 80px; text-align: right; color: #fff; font-weight: 600; }
+
+    /* ── How-To Timeline ── */
+    .timeline { position: relative; padding-left: 32px; }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 11px; top: 0; bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, #7c6fff, #4fc3f7, #7c6fff);
+      background-size: 100% 200%;
+      animation: flow 3s linear infinite;
+    }
+    @keyframes flow { to { background-position: 0 200%; } }
+    .tl-item {
+      position: relative;
+      margin-bottom: 32px;
+      cursor: pointer;
+    }
+    .tl-dot {
+      position: absolute;
+      left: -26px; top: 2px;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #7c6fff;
+      border: 2px solid #0d0d0f;
+      transition: transform 0.2s;
+    }
+    .tl-item:hover .tl-dot { transform: scale(1.4); }
+    .tl-item h3 { font-size: 0.95rem; color: #fff; }
+    .tl-item .meta { font-size: 0.72rem; color: #666; margin: 3px 0 6px; }
+    .tl-item p { font-size: 0.82rem; color: #888; line-height: 1.6; }
+    .tl-cmd {
+      margin-top: 8px;
+      background: #0d0d0f;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-family: monospace;
+      font-size: 0.82rem;
+      color: #7c6fff;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 500px) {
+      .legend { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Compound Loop</h1>
+  <p>A self-reinforcing memory system for Claude Code sessions</p>
+</header>
+
+<nav>
+  <button class="active" onclick="show('flow', this)">Loop Cycle</button>
+  <button onclick="show('files', this)">Context Files</button>
+  <button onclick="show('growth', this)">Compound Growth</button>
+  <button onclick="show('howto', this)">How to Use</button>
+</nav>
+
+<!-- ══ TAB 1: Loop Cycle ══ -->
+<section id="flow" class="visible">
+  <div class="loop-flow" id="flowDiagram"></div>
+  <div class="loop-back">↩ loop compounds every session</div>
+</section>
+
+<!-- ══ TAB 2: Context Files ══ -->
+<section id="files">
+  <div class="files-grid">
+
+    <div class="file-card" style="--accent:#7c6fff; --accent-dim:#7c6fff22;">
+      <div class="file-card-header">
+        <div class="file-icon" style="background:#7c6fff22;">📋</div>
+        <div>
+          <h3>Project Overview</h3>
+          <p>CONTEXT/project-overview.md</p>
+        </div>
+      </div>
+      <div class="file-card-body">
+        <p>The living specification for the project. Updated each session to reflect the latest understanding of what's being built.</p>
+        <div class="file-fields">
+          <div class="file-field"><span class="label" style="color:#7c6fff">Project Name</span><span class="val">Canonical project name</span></div>
+          <div class="file-field"><span class="label" style="color:#7c6fff">Purpose & Goals</span><span class="val">What it does and why</span></div>
+          <div class="file-field"><span class="label" style="color:#7c6fff">Stack</span><span class="val">Languages, frameworks, services</span></div>
+          <div class="file-field"><span class="label" style="color:#7c6fff">Decisions</span><span class="val">Key choices made (append-only)</span></div>
+          <div class="file-field"><span class="label" style="color:#7c6fff">Status</span><span class="val">One-line current state</span></div>
+          <div class="file-field"><span class="label" style="color:#7c6fff">Open Questions</span><span class="val">Unresolved blockers</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="file-card" style="--accent:#f06292; --accent-dim:#f0629222;">
+      <div class="file-card-header">
+        <div class="file-icon" style="background:#f0629222;">🪲</div>
+        <div>
+          <h3>Error Log</h3>
+          <p>CONTEXT/error-log.md</p>
+        </div>
+      </div>
+      <div class="file-card-body">
+        <p>Persistent registry of every error encountered across all sessions — with root causes and resolutions so Claude never repeats the same mistake.</p>
+        <div class="file-fields">
+          <div class="file-field"><span class="label" style="color:#f06292">Context</span><span class="val">What was being worked on</span></div>
+          <div class="file-field"><span class="label" style="color:#f06292">Error</span><span class="val">Exact error message</span></div>
+          <div class="file-field"><span class="label" style="color:#f06292">Root Cause</span><span class="val">Why it happened</span></div>
+          <div class="file-field"><span class="label" style="color:#f06292">Resolution</span><span class="val">Fix applied or OPEN</span></div>
+          <div class="file-field"><span class="label" style="color:#f06292">Lesson</span><span class="val">What to avoid next time</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="file-card" style="--accent:#4fc3f7; --accent-dim:#4fc3f722;">
+      <div class="file-card-header">
+        <div class="file-icon" style="background:#4fc3f722;">💬</div>
+        <div>
+          <h3>Chat Summary</h3>
+          <p>CONTEXT/chat-summary.md</p>
+        </div>
+      </div>
+      <div class="file-card-body">
+        <p>Reverse-chronological log of every session. The most recent summary is always first so Claude orients instantly at session start.</p>
+        <div class="file-fields">
+          <div class="file-field"><span class="label" style="color:#4fc3f7">Discussed</span><span class="val">Topics and decisions covered</span></div>
+          <div class="file-field"><span class="label" style="color:#4fc3f7">Completed</span><span class="val">Concrete work finished</span></div>
+          <div class="file-field"><span class="label" style="color:#4fc3f7">Decisions</span><span class="val">Choices affecting the project</span></div>
+          <div class="file-field"><span class="label" style="color:#4fc3f7">Next</span><span class="val">What to pick up next session</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══ TAB 3: Compound Growth ══ -->
+<section id="growth">
+  <div class="chart-wrap">
+    <div class="chart-title">Context Quality Over Sessions</div>
+    <div class="chart-sub">Drag the slider to simulate session progression</div>
+    <canvas id="growthCanvas" height="300"></canvas>
+    <div class="slider-wrap">
+      <span>Sessions:</span>
+      <input type="range" id="sessionSlider" min="1" max="20" value="1" />
+      <span id="sliderVal">Session 1</span>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#7c6fff"></div>Project Clarity</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f06292"></div>Error Avoidance</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4fc3f7"></div>Context Depth</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#66bb6a"></div>Overall Intelligence</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ TAB 4: How To Use ══ -->
+<section id="howto">
+  <div class="timeline">
+
+    <div class="tl-item">
+      <div class="tl-dot" style="background:#7c6fff"></div>
+      <h3>1 — Session starts automatically</h3>
+      <div class="meta">Trigger: SessionStart hook</div>
+      <p>The <code>session-start.sh</code> hook fires immediately, injecting all three CONTEXT files into the conversation. Claude reads accumulated memory before your first message.</p>
+      <div class="tl-cmd">Automatic — no action needed</div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot" style="background:#4fc3f7"></div>
+      <h3>2 — Work as normal</h3>
+      <div class="meta">During the session</div>
+      <p>Code, debug, plan, ask questions. Claude retains awareness of all prior errors, decisions, and project context. The loop is quietly running in the background.</p>
+      <div class="tl-cmd">Just chat normally</div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot" style="background:#f06292"></div>
+      <h3>3 — End-of-session: run the skill</h3>
+      <div class="meta">Trigger: manual or Stop hook reminder</div>
+      <p>Before closing the chat, invoke the compound-loop skill. Claude will update all three files with everything that happened — errors, decisions, summary, and project status.</p>
+      <div class="tl-cmd">/compound-loop</div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot" style="background:#66bb6a"></div>
+      <h3>4 — Files are committed</h3>
+      <div class="meta">After the skill runs</div>
+      <p>The three updated CONTEXT files are committed to the branch. The next session will load this richer context — making every subsequent session more informed than the last.</p>
+      <div class="tl-cmd">git add CONTEXT/ &amp;&amp; git commit</div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot" style="background:#ffa726"></div>
+      <h3>5 — Repeat, compounding</h3>
+      <div class="meta">Every session after</div>
+      <p>Each loop iteration adds a layer of context. Over time, Claude develops a deeply accurate model of the project, its history, its mistakes, and its goals — without relying on conversational memory.</p>
+      <div class="tl-cmd">↩ back to step 1</div>
+    </div>
+
+  </div>
+</section>
+
+<script>
+  /* ── Tab switching ── */
+  function show(id, btn) {
+    document.querySelectorAll('section').forEach(s => s.classList.remove('visible'));
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.getElementById(id).classList.add('visible');
+    btn.classList.add('active');
+    if (id === 'growth') drawChart(+document.getElementById('sessionSlider').value);
+  }
+
+  /* ── Loop flow nodes ── */
+  const nodes = [
+    {
+      tag: 'Session Start',
+      accent: '#7c6fff',
+      glow: '#7c6fff33',
+      title: 'SessionStart Hook fires',
+      desc: 'session-start.sh injects all three CONTEXT files',
+      detail: `The <code>SessionStart</code> hook in <code>.claude/settings.json</code> runs <code>session-start.sh</code> automatically. It reads all three CONTEXT files and injects them into the conversation — Claude has full project memory before you type a single word.`
+    },
+    {
+      tag: 'Context Load',
+      accent: '#4fc3f7',
+      glow: '#4fc3f733',
+      title: 'Claude reads accumulated memory',
+      desc: 'project-overview · error-log · chat-summary',
+      detail: `Claude reads the project name, goals, architecture, past errors and their resolutions, decisions made, and a reverse-chronological log of every previous session. This replaces the need to re-explain the project each time.`
+    },
+    {
+      tag: 'Session Work',
+      accent: '#66bb6a',
+      glow: '#66bb6a33',
+      title: 'Normal development session',
+      desc: 'Code, debug, plan — Claude tracks everything',
+      detail: `Work proceeds as normal. Claude silently tracks: new errors encountered, architectural decisions made, features completed, and open questions that arise. Nothing needs to be manually logged during the session.`
+    },
+    {
+      tag: 'Skill Invoked',
+      accent: '#ffa726',
+      glow: '#ffa72633',
+      title: '/compound-loop',
+      desc: 'Updates all three CONTEXT files in sequence',
+      detail: `Running <code>/compound-loop</code> triggers the skill defined in <code>.claude/skills/compound-loop.md</code>. Claude updates <code>project-overview.md</code>, appends to <code>error-log.md</code>, and prepends a new entry to <code>chat-summary.md</code> — all in one pass.`
+    },
+    {
+      tag: 'Session End',
+      accent: '#f06292',
+      glow: '#f0629233',
+      title: 'Stop Hook reminder',
+      desc: 'session-end.sh confirms the loop is closed',
+      detail: `The <code>Stop</code> hook fires when Claude finishes generating. If <code>/compound-loop</code> hasn't been run, <code>session-end.sh</code> prints a reminder. Once the files are committed, the loop is sealed and the next session inherits richer context.`
+    }
+  ];
+
+  const container = document.getElementById('flowDiagram');
+  nodes.forEach((n, i) => {
+    // Node
+    const node = document.createElement('div');
+    node.className = 'loop-node';
+    node.style.setProperty('--accent', n.accent);
+    node.style.setProperty('--glow', n.glow);
+    node.innerHTML = `<div class="tag">${n.tag}</div><h3>${n.title}</h3><p>${n.desc}</p>`;
+
+    // Detail panel
+    const detail = document.createElement('div');
+    detail.className = 'node-detail';
+    detail.innerHTML = `<div class="node-detail-inner">${n.detail}</div>`;
+
+    node.addEventListener('click', () => {
+      const isOpen = detail.classList.contains('open');
+      document.querySelectorAll('.node-detail').forEach(d => d.classList.remove('open'));
+      document.querySelectorAll('.loop-node').forEach(d => d.classList.remove('active'));
+      if (!isOpen) { detail.classList.add('open'); node.classList.add('active'); }
+    });
+
+    container.appendChild(node);
+    container.appendChild(detail);
+
+    // Arrow between nodes
+    if (i < nodes.length - 1) {
+      const arrow = document.createElement('div');
+      arrow.className = 'arrow';
+      container.appendChild(arrow);
+    }
+  });
+
+  /* ── Compound Growth Chart ── */
+  function drawChart(sessions) {
+    const canvas = document.getElementById('growthCanvas');
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr || 900 * dpr;
+    canvas.height = 300 * dpr;
+    ctx.scale(dpr, dpr);
+    const W = canvas.width / dpr;
+    const H = canvas.height / dpr;
+    ctx.clearRect(0, 0, W, H);
+
+    const pad = { top: 20, right: 20, bottom: 36, left: 40 };
+    const chartW = W - pad.left - pad.right;
+    const chartH = H - pad.top - pad.bottom;
+    const total = 20;
+
+    // Grid
+    ctx.strokeStyle = '#1e1e2e';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = pad.top + (chartH / 4) * i;
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + chartW, y); ctx.stroke();
+      ctx.fillStyle = '#555'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+      ctx.fillText(`${100 - i * 25}%`, pad.left - 6, y + 4);
+    }
+
+    // X labels
+    ctx.textAlign = 'center'; ctx.fillStyle = '#555'; ctx.font = '10px sans-serif';
+    for (let s = 1; s <= total; s += 2) {
+      const x = pad.left + ((s - 1) / (total - 1)) * chartW;
+      ctx.fillText(s, x, H - pad.bottom + 16);
+    }
+    ctx.fillStyle = '#444'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('Sessions', pad.left + chartW / 2, H - 2);
+
+    // Curves
+    const series = [
+      { color: '#7c6fff', fn: s => 1 - Math.exp(-0.28 * s) },       // Project Clarity
+      { color: '#f06292', fn: s => 1 - Math.exp(-0.18 * s) * 0.95 }, // Error Avoidance
+      { color: '#4fc3f7', fn: s => 1 - Math.exp(-0.22 * s) },        // Context Depth
+      { color: '#66bb6a', fn: s => 1 - Math.exp(-0.20 * s) * 0.92 }  // Overall
+    ];
+
+    series.forEach(({ color, fn }) => {
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      for (let s = 1; s <= total; s++) {
+        const x = pad.left + ((s - 1) / (total - 1)) * chartW;
+        const y = pad.top + chartH - fn(s) * chartH;
+        s === 1 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    });
+
+    // Session cursor
+    const cx = pad.left + ((sessions - 1) / (total - 1)) * chartW;
+    ctx.strokeStyle = '#ffffff22';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(cx, pad.top); ctx.lineTo(cx, pad.top + chartH); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Dots at cursor
+    series.forEach(({ color, fn }) => {
+      const y = pad.top + chartH - fn(sessions) * chartH;
+      ctx.beginPath();
+      ctx.arc(cx, y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = '#0d0d0f';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
+  }
+
+  const slider = document.getElementById('sessionSlider');
+  const sliderVal = document.getElementById('sliderVal');
+  slider.addEventListener('input', () => {
+    const v = +slider.value;
+    sliderVal.textContent = `Session ${v}`;
+    drawChart(v);
+  });
+
+  window.addEventListener('resize', () => {
+    if (document.getElementById('growth').classList.contains('visible'))
+      drawChart(+slider.value);
+  });
+</script>
+</body>
+</html>
